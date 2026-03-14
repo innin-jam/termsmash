@@ -6,6 +6,7 @@ pub enum Input {
     Right,
     Up,
     Down,
+    Jump,
     Quit,
 }
 
@@ -16,6 +17,7 @@ pub fn get_input(key_code: KeyCode, key_modifiers: KeyModifiers) -> Option<Input
         KeyCode::Char('s') => Input::Down,
         KeyCode::Char('t') => Input::Right,
         KeyCode::Char('f') => Input::Up,
+        KeyCode::Char(' ') => Input::Jump,
         _ => return None,
     })
 }

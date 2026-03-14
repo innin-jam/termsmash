@@ -1,17 +1,12 @@
 use crate::input::Input;
+pub use hitbox::Hitbox;
+
+mod hitbox;
 
 pub struct App {
     player: Player,
     level: Vec<Hitbox>,
     should_quit: bool,
-}
-
-#[derive(Default)]
-pub struct Hitbox {
-    pub x: i32,
-    pub y: i32,
-    pub width: i32,
-    pub height: i32,
 }
 
 #[derive(Default)]
@@ -37,97 +32,7 @@ enum PlayerState {
     Fall(u16),
     JumpForwards(u16),
     FallForwards(u16),
-}
-
-// TODO extract into private model, publicly reexport Hitbox
-impl Hitbox {
-    fn new(x: i32, y: i32, width: i32, height: i32) -> Self {
-        Self {
-            x,
-            y,
-            width,
-            height,
-        }
-    }
-
-    fn new_extend_upwards(x: i32, y: i32, width: i32, height: i32) -> Self {
-        Self::new(x, y + height, width, height)
-    }
-
-    fn move_x(&mut self, dx: i32, level: &[Hitbox]) -> i32 {
-        if dx == 0 {
-            return dx;
-        }
-
-        let potential_obstacles = level
-            .iter()
-            .filter(|o| self.y - self.height < o.y && o.y - o.height < self.y);
-
-        let mut max_move = dx;
-        for obstacle in potential_obstacles {
-            if dx > 0 {
-                if self.x + self.width <= obstacle.x {
-                    let gap = obstacle.x - (self.x + self.width);
-                    if gap < max_move {
-                        max_move = gap;
-                    }
-                }
-            } else {
-                if obstacle.x + obstacle.width <= self.x {
-                    let gap = (obstacle.x + obstacle.width) - self.x;
-                    if gap > max_move {
-                        max_move = gap;
-                    }
-                }
-            }
-        }
-        self.x += max_move;
-        max_move
-    }
-
-    fn move_y(&mut self, dy: i32, level: &[Hitbox]) -> i32 {
-        if dy == 0 {
-            return dy;
-        }
-
-        let potential_obstacles = level
-            .iter()
-            .filter(|o| o.x < self.x + self.width && self.x < o.x + o.width);
-
-        let mut max_move = dy;
-        for obstacle in potential_obstacles {
-            if dy > 0 {
-                if self.y <= obstacle.y - obstacle.height {
-                    let gap = (obstacle.y - obstacle.height) - self.y;
-                    if gap < max_move {
-                        max_move = gap;
-                    }
-                }
-            } else {
-                if obstacle.y <= self.y - self.height {
-                    let gap = obstacle.y - (self.y - self.height);
-                    if gap > max_move {
-                        max_move = gap;
-                    }
-                }
-            }
-        }
-        self.y += max_move;
-        max_move
-    }
-
-    fn touching_below(&self, level: &[Hitbox]) -> bool {
-        let potential_obstacles = level
-            .iter()
-            .filter(|o| o.x < self.x + self.width && self.x < o.x + o.width);
-
-        for obstacle in potential_obstacles {
-            if self.y - self.height == obstacle.y {
-                return true;
-            }
-        }
-        false
-    }
+    Dash(u16),
 }
 
 impl Player {
@@ -142,6 +47,20 @@ impl Player {
     }
 
     fn tick(&mut self, input: Option<Input>, level: &[Hitbox]) {
+        fn allow_dash(self_: &mut Player, input: Input) {
+            match input {
+                Input::Left => {
+                    self_.direction = Direction::Left;
+                    self_.state = PlayerState::Dash(0);
+                }
+                Input::Right => {
+                    self_.direction = Direction::Right;
+                    self_.state = PlayerState::Dash(0);
+                }
+                _ => {}
+            }
+        }
+
         match self.state {
             PlayerState::Idle => {
                 if let Some(input) = input {
@@ -154,11 +73,12 @@ impl Player {
                             self.direction = Direction::Right;
                             self.state = PlayerState::Walk
                         }
-                        Input::Up => self.state = PlayerState::Jump(0),
+                        Input::Jump => self.state = PlayerState::Jump(0),
                         _ => {}
                     }
                 }
             }
+
             PlayerState::Walk => {
                 let dx = match self.direction {
                     Direction::Left => -1,
@@ -179,12 +99,13 @@ impl Player {
                         Input::Right if matches!(self.direction, Direction::Left) => {
                             self.direction = Direction::Right;
                         }
-                        Input::Up => self.state = PlayerState::JumpForwards(0),
+                        Input::Jump => self.state = PlayerState::JumpForwards(0),
                         Input::Down => self.state = PlayerState::Idle,
                         _ => {}
                     }
                 }
             }
+
             PlayerState::Jump(ref mut f) => {
                 *f += 1;
                 let dy = match f {
@@ -194,18 +115,20 @@ impl Player {
                     4 => 1,
                     5 => 1,
                     6 => 1,
-                    7 => 0,
-                    8 => 0,
-                    9 => 0,
-                    _ => {
+                    _ => 0,
+                };
+                if self.hitbox.move_y(dy, level) != dy || *f > 8 {
+                    self.state = PlayerState::Fall(0)
+                };
+                if let Some(input) = input {
+                    if matches!(input, Input::Down) {
                         self.state = PlayerState::Fall(0);
                         return;
                     }
-                };
-                if self.hitbox.move_y(dy, level) != dy {
-                    self.state = PlayerState::Fall(0)
-                };
+                    allow_dash(self, input);
+                }
             }
+
             PlayerState::Fall(ref mut f) => {
                 *f += 1;
                 let dy = match *f {
@@ -215,7 +138,11 @@ impl Player {
                 if self.hitbox.move_y(dy, level) != dy {
                     self.state = PlayerState::Idle;
                 }
+                if let Some(input) = input {
+                    allow_dash(self, input);
+                }
             }
+
             PlayerState::JumpForwards(ref mut f) => {
                 *f += 1;
                 let dx = match self.direction {
@@ -229,24 +156,28 @@ impl Player {
                     4 => 1,
                     5 => 1,
                     6 => 1,
-                    7 => 0,
-                    8 => 0,
-                    9 => 0,
-                    _ => {
-                        self.state = PlayerState::FallForwards(0);
-                        return;
-                    }
+                    _ => 0,
                 };
+
                 match (
                     self.hitbox.move_x(dx, level) != dx,
                     self.hitbox.move_y(dy, level) != dy,
                 ) {
-                    (true, false) => self.state = PlayerState::Jump(*f),
-                    (false, true) => self.state = PlayerState::FallForwards(0),
                     (true, true) => self.state = PlayerState::Fall(0),
-                    _ => {}
+                    _ if *f > 8 => self.state = PlayerState::FallForwards(0),
+                    (false, true) => self.state = PlayerState::FallForwards(0),
+                    (true, false) => self.state = PlayerState::Jump(*f),
+                    (false, false) => {}
+                }
+                if let Some(input) = input {
+                    if matches!(input, Input::Down) {
+                        self.state = PlayerState::Fall(0);
+                        return;
+                    }
+                    allow_dash(self, input);
                 }
             }
+
             PlayerState::FallForwards(ref mut f) => {
                 *f += 1;
                 let dx = match self.direction {
@@ -266,6 +197,35 @@ impl Player {
                     (true, true) => self.state = PlayerState::Idle,
                     _ => {}
                 }
+
+                if let Some(input) = input {
+                    if matches!(input, Input::Down) {
+                        self.state = PlayerState::Fall(0);
+                        return;
+                    }
+                    allow_dash(self, input);
+                }
+            }
+
+            PlayerState::Dash(ref mut f) => {
+                *f += 1;
+                if *f > 5 {
+                    self.state = PlayerState::FallForwards(0);
+                }
+                let dx = match self.direction {
+                    Direction::Left => -3,
+                    Direction::Right => 3,
+                };
+
+                if self.hitbox.move_x(dx, level) != dx {
+                    self.state = PlayerState::Fall(0);
+                }
+                if let Some(input) = input {
+                    if matches!(input, Input::Down) {
+                        self.state = PlayerState::Fall(0);
+                        return;
+                    }
+                }
             }
         }
     }
@@ -277,27 +237,45 @@ impl App {
             player: Player::new(0, 0),
             level: vec![
                 Hitbox {
-                    x: -7,
-                    y: 0,
+                    x: -22,
+                    y: -10,
                     width: 60,
                     height: 10,
                 },
                 Hitbox {
-                    x: -19,
-                    y: 0,
+                    x: -34,
+                    y: -10,
                     width: 10,
                     height: 10,
                 },
                 Hitbox {
-                    x: -10,
-                    y: 8,
+                    x: -45,
+                    y: -9,
+                    width: 10,
+                    height: 10,
+                },
+                Hitbox {
+                    x: -37,
+                    y: 4,
+                    width: 8,
+                    height: 3,
+                },
+                Hitbox {
+                    x: -25,
+                    y: -2,
                     width: 30,
                     height: 3,
                 },
                 Hitbox {
-                    x: -30,
-                    y: 1,
-                    width: 10,
+                    x: -10,
+                    y: 6,
+                    width: 20,
+                    height: 3,
+                },
+                Hitbox {
+                    x: 25,
+                    y: -10,
+                    width: 50,
                     height: 10,
                 },
             ],
