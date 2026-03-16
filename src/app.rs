@@ -29,7 +29,7 @@ enum PlayerState {
     Idle,
     Jump(u16),
     Fall(u16),
-    Dash(u16),
+    Dash(i32),
 }
 
 impl Player {
@@ -44,93 +44,130 @@ impl Player {
     }
 
     fn tick(&mut self, input: Option<Input>, level: &[Hitbox]) {
-        fn allow_dash(self_: &mut Player, input: Input) {
-            match input {
-                Input::Left => {
-                    self_.direction = Direction::Left;
-                    self_.state = PlayerState::Dash(0);
-                }
-                Input::Right => {
-                    self_.direction = Direction::Right;
-                    self_.state = PlayerState::Dash(0);
-                }
-                _ => {}
-            }
-        }
-
         match self.state {
             PlayerState::Idle => {
                 if let Some(input) = input {
                     match input {
+                        Input::Up => {
+                            self.state = PlayerState::Jump(0);
+                        }
                         Input::Left => {
                             self.direction = Direction::Left;
-                            todo!() // dash left
+                            self.state = PlayerState::Dash(0);
                         }
                         Input::Right => {
                             self.direction = Direction::Right;
-                            todo!() // dash right
+                            self.state = PlayerState::Dash(0);
                         }
-                        Input::Jump => self.state = PlayerState::Jump(0),
                         _ => {}
-                    }
+                    };
                 }
             }
 
             PlayerState::Jump(ref mut f) => {
                 *f += 1;
                 let dy = match f {
-                    1 => 2,
+                    1 => 3,
                     2 => 2,
-                    3 => 1,
+                    3 => 2,
                     4 => 1,
                     5 => 1,
-                    6 => 1,
                     _ => 0,
                 };
                 if self.hitbox.move_y(dy, level) != dy || *f > 8 {
                     self.state = PlayerState::Fall(0)
                 };
                 if let Some(input) = input {
-                    if matches!(input, Input::Down) {
-                        self.state = PlayerState::Fall(0);
-                        return;
-                    }
-                    allow_dash(self, input);
+                    match input {
+                        Input::Down => {
+                            self.state = PlayerState::Fall(0);
+                        }
+                        Input::Left => {
+                            self.direction = Direction::Left;
+                            self.state = PlayerState::Dash(0);
+                        }
+                        Input::Right => {
+                            self.direction = Direction::Right;
+                            self.state = PlayerState::Dash(0);
+                        }
+                        _ => {}
+                    };
                 }
             }
 
             PlayerState::Fall(ref mut f) => {
                 *f += 1;
                 let dy = match *f {
-                    1..=3 => -1,
-                    _ => -2,
+                    1..3 => -1,
+                    3..5 => -2,
+                    _ => -3,
                 };
+
                 if self.hitbox.move_y(dy, level) != dy {
                     self.state = PlayerState::Idle;
                 }
                 if let Some(input) = input {
-                    allow_dash(self, input);
+                    match input {
+                        Input::Left => {
+                            self.direction = Direction::Left;
+                            self.state = PlayerState::Dash(0);
+                        }
+                        Input::Right => {
+                            self.direction = Direction::Right;
+                            self.state = PlayerState::Dash(0);
+                        }
+                        _ => {}
+                    };
                 }
             }
 
             PlayerState::Dash(ref mut f) => {
                 *f += 1;
+
+                let dx = match f {
+                    1..3 => 5,
+                    3 => 2,
+                    4 => 1,
+                    _ => 0,
+                };
+                let dx = match self.direction {
+                    Direction::Left => -dx,
+                    Direction::Right => dx,
+                };
+                let hit_wall = self.hitbox.move_x(dx, level) != dx;
+
+                if *f > 0
+                    && let Some(input) = input
+                {
+                    match input {
+                        Input::Left => {
+                            self.direction = Direction::Left;
+                            self.state = PlayerState::Dash(0);
+                            return;
+                        }
+                        Input::Right => {
+                            self.direction = Direction::Right;
+                            self.state = PlayerState::Dash(0);
+                            return;
+                        }
+                        Input::Up if self.hitbox.touching_below(level) => {
+                            self.state = PlayerState::Jump(0);
+                            return;
+                        }
+                        _ => {}
+                    };
+                }
+                if hit_wall {
+                    if self.hitbox.touching_below(level) {
+                        self.state = PlayerState::Idle;
+                    } else {
+                        self.state = PlayerState::Fall(0);
+                    }
+                    return;
+                }
                 if *f > 5 {
                     self.state = PlayerState::Fall(0);
-                }
-                let dx = match self.direction {
-                    Direction::Left => -3,
-                    Direction::Right => 3,
-                };
-
-                if self.hitbox.move_x(dx, level) != dx {
-                    self.state = PlayerState::Fall(0);
-                }
-                if let Some(input) = input {
-                    if matches!(input, Input::Down) {
-                        self.state = PlayerState::Fall(0);
-                        return;
-                    }
+                    return;
                 }
             }
         }
