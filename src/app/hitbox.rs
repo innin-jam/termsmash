@@ -82,16 +82,16 @@ impl Hitbox {
         max_move
     }
 
-    pub fn touching_below(&self, level: &[Hitbox]) -> bool {
+    pub fn touching_below<'a>(&self, level: &'a [Hitbox]) -> Option<&'a Hitbox> {
         let potential_obstacles = level
             .iter()
             .filter(|o| o.x < self.x + self.width && self.x < o.x + o.width);
 
         for obstacle in potential_obstacles {
             if self.y - self.height == obstacle.y {
-                return true;
+                return Some(&obstacle);
             }
         }
-        false
+        None
     }
 }

@@ -1,7 +1,10 @@
+use crate::app::entity::Player;
 use crate::input::Input;
 pub use hitbox::Hitbox;
 
 mod hitbox;
+
+mod entity;
 
 pub struct App {
     player: Player,
@@ -9,218 +12,82 @@ pub struct App {
     should_quit: bool,
 }
 
-#[derive(Default)]
-enum Direction {
-    Left,
-    #[default]
-    Right,
-}
-
-#[derive(Default)]
-struct Player {
-    hitbox: Hitbox,
-    state: PlayerState,
-    direction: Direction,
-}
-
-#[derive(Default)]
-enum PlayerState {
-    #[default]
-    Idle,
-    Jump(u16),
-    Fall(u16),
-    Dash(i32),
-}
-
-impl Player {
-    fn new(x: i32, y: i32) -> Self {
-        let width = 3;
-        let height = 3;
-        Self {
-            hitbox: Hitbox::new_extend_upwards(x, y, width, height),
-            direction: Direction::Right,
-            state: PlayerState::Idle,
-        }
-    }
-
-    fn tick(&mut self, input: Option<Input>, level: &[Hitbox]) {
-        match self.state {
-            PlayerState::Idle => {
-                if let Some(input) = input {
-                    match input {
-                        Input::Up => {
-                            self.state = PlayerState::Jump(0);
-                        }
-                        Input::Left => {
-                            self.direction = Direction::Left;
-                            self.state = PlayerState::Dash(0);
-                        }
-                        Input::Right => {
-                            self.direction = Direction::Right;
-                            self.state = PlayerState::Dash(0);
-                        }
-                        _ => {}
-                    };
-                }
-            }
-
-            PlayerState::Jump(ref mut f) => {
-                *f += 1;
-                let dy = match f {
-                    1 => 3,
-                    2 => 2,
-                    3 => 2,
-                    4 => 1,
-                    5 => 1,
-                    _ => 0,
-                };
-                if self.hitbox.move_y(dy, level) != dy || *f > 8 {
-                    self.state = PlayerState::Fall(0)
-                };
-                if let Some(input) = input {
-                    match input {
-                        Input::Down => {
-                            self.state = PlayerState::Fall(0);
-                        }
-                        Input::Left => {
-                            self.direction = Direction::Left;
-                            self.state = PlayerState::Dash(0);
-                        }
-                        Input::Right => {
-                            self.direction = Direction::Right;
-                            self.state = PlayerState::Dash(0);
-                        }
-                        _ => {}
-                    };
-                }
-            }
-
-            PlayerState::Fall(ref mut f) => {
-                *f += 1;
-                let dy = match *f {
-                    1..3 => -1,
-                    3..5 => -2,
-                    _ => -3,
-                };
-
-                if self.hitbox.move_y(dy, level) != dy {
-                    self.state = PlayerState::Idle;
-                }
-                if let Some(input) = input {
-                    match input {
-                        Input::Left => {
-                            self.direction = Direction::Left;
-                            self.state = PlayerState::Dash(0);
-                        }
-                        Input::Right => {
-                            self.direction = Direction::Right;
-                            self.state = PlayerState::Dash(0);
-                        }
-                        _ => {}
-                    };
-                }
-            }
-
-            PlayerState::Dash(ref mut f) => {
-                *f += 1;
-
-                let dx = match f {
-                    1..3 => 5,
-                    3 => 2,
-                    4 => 1,
-                    _ => 0,
-                };
-                let dx = match self.direction {
-                    Direction::Left => -dx,
-                    Direction::Right => dx,
-                };
-                let hit_wall = self.hitbox.move_x(dx, level) != dx;
-
-                if *f > 0
-                    && let Some(input) = input
-                {
-                    match input {
-                        Input::Left => {
-                            self.direction = Direction::Left;
-                            self.state = PlayerState::Dash(0);
-                            return;
-                        }
-                        Input::Right => {
-                            self.direction = Direction::Right;
-                            self.state = PlayerState::Dash(0);
-                            return;
-                        }
-                        Input::Up if self.hitbox.touching_below(level) => {
-                            self.state = PlayerState::Jump(0);
-                            return;
-                        }
-                        _ => {}
-                    };
-                }
-                if hit_wall {
-                    if self.hitbox.touching_below(level) {
-                        self.state = PlayerState::Idle;
-                    } else {
-                        self.state = PlayerState::Fall(0);
-                    }
-                    return;
-                }
-                if *f > 5 {
-                    self.state = PlayerState::Fall(0);
-                    return;
-                }
-            }
-        }
-    }
-}
-
 impl App {
     pub fn new() -> Self {
         App {
             player: Player::new(0, 0),
             level: vec![
+                // --- Boundary walls ---
                 Hitbox {
-                    x: -22,
-                    y: -10,
-                    width: 60,
-                    height: 10,
-                },
+                    x: -90,
+                    y: -20,
+                    width: 4,
+                    height: 40,
+                }, // left wall
                 Hitbox {
-                    x: -34,
-                    y: -10,
-                    width: 10,
-                    height: 10,
-                },
+                    x: 86,
+                    y: -20,
+                    width: 4,
+                    height: 40,
+                }, // right wall
+                // --- Floor (3 slabs with 2 holes) ---
+                // Hole 1: x=-50..-35 (15 units wide)
+                // Hole 2: x=-7..28   (35 units wide)
                 Hitbox {
-                    x: -45,
-                    y: -9,
-                    width: 10,
-                    height: 10,
-                },
-                Hitbox {
-                    x: -37,
-                    y: 4,
-                    width: 8,
+                    x: -84,
+                    y: -17,
+                    width: 40,
                     height: 3,
-                },
+                }, // floor A (left)
                 Hitbox {
-                    x: -25,
-                    y: -2,
-                    width: 30,
+                    x: -35,
+                    y: -17,
+                    width: 50,
                     height: 3,
-                },
+                }, // floor B (center)
                 Hitbox {
-                    x: -10,
-                    y: 6,
+                    x: 28,
+                    y: -17,
+                    width: 58,
+                    height: 3,
+                }, // floor C (right)
+                // --- Platforms (ascending left to right) ---
+                Hitbox {
+                    x: -80,
+                    y: -8,
+                    width: 18,
+                    height: 3,
+                }, // P1 — low left
+                Hitbox {
+                    x: -55,
+                    y: 0,
                     width: 20,
                     height: 3,
-                },
+                }, // P2 — mid left
                 Hitbox {
-                    x: 25,
-                    y: -10,
-                    width: 50,
-                    height: 10,
-                },
+                    x: -20,
+                    y: 8,
+                    width: 22,
+                    height: 3,
+                }, // P3 — upper center-left
+                Hitbox {
+                    x: 10,
+                    y: 14,
+                    width: 20,
+                    height: 3,
+                }, // P4 — near the top, center-right
+                Hitbox {
+                    x: 40,
+                    y: 5,
+                    width: 18,
+                    height: 3,
+                }, // P5 — mid right
+                Hitbox {
+                    x: 62,
+                    y: -5,
+                    width: 18,
+                    height: 3,
+                }, // P6 — low right
             ],
             should_quit: false,
         }
@@ -241,7 +108,7 @@ impl App {
     }
 
     pub fn player_hitbox(&self) -> &Hitbox {
-        &self.player.hitbox
+        &self.player.hitbox()
     }
 
     pub fn level(&self) -> &Vec<Hitbox> {
