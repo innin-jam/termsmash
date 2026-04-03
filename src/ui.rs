@@ -2,11 +2,23 @@ use ratatui::{
     Frame,
     layout::Rect,
     prelude::Buffer,
-    widgets::{Block, BorderType, Widget},
+    symbols,
+    widgets::{Block, Widget},
 };
 
 use crate::app::App;
 use crate::app::Hitbox;
+
+const HITBOX_BORDER: symbols::border::Set = symbols::border::Set {
+    top_left: "█",
+    top_right: "█",
+    bottom_left: "█",
+    bottom_right: "█",
+    vertical_left: "█",
+    vertical_right: "█",
+    horizontal_top: "▀",
+    horizontal_bottom: "▄",
+};
 
 // impl Widget for &Player {
 //     fn render(self, area: Rect, buf: &mut Buffer) {
@@ -47,7 +59,7 @@ impl Widget for &Hitbox {
         };
 
         Block::bordered()
-            .border_type(BorderType::QuadrantOutside)
+            .border_set(HITBOX_BORDER)
             .render(rect, buf);
     }
 }
