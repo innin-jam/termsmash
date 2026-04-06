@@ -4,10 +4,10 @@ pub use hitbox::Hitbox;
 
 mod hitbox;
 
-mod entity;
+pub mod entity;
 
 pub struct App {
-    player: Player,
+    pub player: Player,
     level: Vec<Hitbox>,
     should_quit: bool,
 }

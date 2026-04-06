@@ -29,7 +29,7 @@ impl DashCount {
     }
 }
 
-enum PlayerState {
+pub enum PlayerState {
     Idle,
     Jump(u16),
     Fall(u16),
@@ -322,5 +322,9 @@ impl Player {
                 }
             }
         }
+    }
+
+    pub fn state(&self) -> &PlayerState {
+        &self.state
     }
 }
