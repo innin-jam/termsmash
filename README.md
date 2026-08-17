@@ -15,4 +15,6 @@ cargo run
 - `s` to charge jump -- pressing `a`/`d` next will perform a jump in the respective direction
 - `q` to quit
 
+---
+
 [![Built With Ratatui](https://img.shields.io/badge/Built_With_Ratatui-000?logo=ratatui&logoColor=fff)](https://ratatui.rs/)
