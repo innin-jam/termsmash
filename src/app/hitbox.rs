@@ -1,3 +1,5 @@
+use crate::app::Camera;
+
 #[derive(Default)]
 pub struct Hitbox {
     pub x: i32,
@@ -93,5 +95,14 @@ impl Hitbox {
             }
         }
         None
+    }
+
+    pub fn relative_to_camera(&self, camera: &Camera) -> Self {
+        Self {
+            x: self.x - camera.x,
+            y: self.y - camera.y,
+            width: self.width,
+            height: self.height,
+        }
     }
 }

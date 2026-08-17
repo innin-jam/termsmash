@@ -6,9 +6,9 @@ use ratatui::{
     widgets::{Block, Paragraph, Widget},
 };
 
-use crate::app::App;
 use crate::app::Hitbox;
 use crate::app::entity::Player;
+use crate::app::{App, Camera};
 
 const HITBOX_BORDER: symbols::border::Set = symbols::border::Set {
     top_left: "█",
@@ -21,22 +21,24 @@ const HITBOX_BORDER: symbols::border::Set = symbols::border::Set {
     horizontal_bottom: "▄",
 };
 
-struct ScreenObject {
+struct Sprite {
     pub rect: Rect,
     pub contents: String,
 }
 
-const PLAYER_SPRITE: &str = "\
+mod player {
+    pub const IDLE: &str = "\
 ███
 ███
 ███
 ";
 
-const PLAYER_SPRITE_CROUCH: &str = "\
+    pub const CROUCH: &str = "\
    \n\
 ███
 ███
 ";
+}
 
 fn sprite_dimensions(sprite: &str) -> (u16, u16) {
     let height = sprite.lines().count() as u16;
@@ -44,7 +46,7 @@ fn sprite_dimensions(sprite: &str) -> (u16, u16) {
     (width, height)
 }
 
-impl ScreenObject {
+impl Sprite {
     fn clip_left(content: &str, amount: usize) -> String {
         content
             .lines()
@@ -57,17 +59,12 @@ impl ScreenObject {
         content.lines().skip(amount).collect::<Vec<_>>().join("\n")
     }
 
-    fn from_player(player: &Player, area: Rect) -> Option<Self> {
-        let mut sprite = if matches!(player.state(), crate::app::entity::PlayerState::Crouch(_)) {
-            PLAYER_SPRITE_CROUCH
-        } else {
-            PLAYER_SPRITE
-        }
-        .to_string();
+    pub fn new(content: &str, hitbox: &Hitbox, area: Rect) -> Option<Self> {
+        let mut sprite = content.to_string();
         let (sprite_w, sprite_h) = sprite_dimensions(&sprite);
 
-        let render_x = player.hitbox().x + (area.width / 2) as i32;
-        let render_y = -player.hitbox().y + (area.height / 2) as i32;
+        let render_x = hitbox.x + (area.width / 2) as i32;
+        let render_y = -hitbox.y + (area.height / 2) as i32;
 
         if render_x >= area.width as i32
             || render_y >= area.height as i32
@@ -84,19 +81,28 @@ impl ScreenObject {
             sprite = Self::clip_top(&sprite, render_y.unsigned_abs() as usize);
         }
 
-        Some(ScreenObject {
+        Some(Sprite {
             rect: Rect::new(
                 render_x.max(0) as u16,
                 render_y.max(0) as u16,
                 sprite_w,
                 sprite_h,
             ),
-            contents: sprite,
+            contents: sprite.to_owned(),
         })
+    }
+
+    fn from_player(player: &Player, area: Rect) -> Option<Self> {
+        let sprite = if matches!(player.state(), crate::app::entity::PlayerState::Crouch(_)) {
+            player::CROUCH
+        } else {
+            player::IDLE
+        };
+        Self::new(sprite, player.hitbox(), area)
     }
 }
 
-impl Widget for ScreenObject {
+impl Widget for Sprite {
     fn render(self, _area: Rect, buf: &mut Buffer)
     where
         Self: Sized,
@@ -128,22 +134,66 @@ impl Widget for &Hitbox {
     }
 }
 
+fn render_player(player: &Player, camera: &Camera, area: Rect, buf: &mut Buffer) {
+    let hitbox = player.hitbox().relative_to_camera(camera);
+
+    let sprite = match player.state() {
+        crate::app::entity::PlayerState::Crouch(_) => player::CROUCH,
+        _ => player::IDLE,
+    };
+
+    let mut sprite = sprite.to_string();
+    let (sprite_w, sprite_h) = sprite_dimensions(&sprite);
+
+    let render_x = hitbox.x + (area.width / 2) as i32;
+    let render_y = -hitbox.y + (area.height / 2) as i32;
+
+    if render_x >= area.width as i32
+        || render_y >= area.height as i32
+        || render_x + sprite_w as i32 <= 0
+        || render_y + sprite_h as i32 <= 0
+    {
+        return;
+    }
+
+    if render_x < 0 {
+        sprite = clip_left(&sprite, render_x.unsigned_abs() as usize);
+    }
+    if render_y < 0 {
+        sprite = clip_top(&sprite, render_y.unsigned_abs() as usize);
+    }
+
+    let render_area = Rect {
+        x: render_x.max(0) as u16,
+        y: render_y.max(0) as u16,
+        width: area.width,
+        height: area.height,
+    };
+
+    Paragraph::new(sprite).render(render_area, buf);
+}
+
+fn clip_left(content: &str, amount: usize) -> String {
+    content
+        .lines()
+        .map(|line| line.chars().skip(amount).collect::<String>())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn clip_top(content: &str, amount: usize) -> String {
+    content.lines().skip(amount).collect::<Vec<_>>().join("\n")
+}
+
 pub fn ui(frame: &mut Frame, app: &App) {
     let area = frame.area();
 
     // render hitboxes
-    // frame.render_widget(app.player_hitbox(), area);
     for platform in app.level() {
-        frame.render_widget(platform, area);
+        frame.render_widget(&platform.relative_to_camera(&app.camera()), area);
     }
 
-    let mut screen_objects = Vec::<ScreenObject>::new();
-
-    if let Some(player_sprite) = ScreenObject::from_player(&app.player, area) {
-        screen_objects.push(player_sprite);
-    }
-
-    for o in screen_objects {
-        frame.render_widget(o, area);
+    if let Some(player_sprite) = Sprite::from_player(&app.player, /* app.camera(), */ area) {
+        frame.render_widget(player_sprite, area);
     }
 }
