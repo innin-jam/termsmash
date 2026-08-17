@@ -1,3 +1,5 @@
+[![Built With Ratatui](https://img.shields.io/badge/Built_With_Ratatui-000?logo=ratatui&logoColor=fff)](https://ratatui.rs/)
+
 This is a proof of concept for a platformer game played in your terminal.
 
 ## Installation
